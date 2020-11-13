@@ -11,23 +11,39 @@ import {
 import { FileInterceptor, FilesInterceptor } from '@nestjs/platform-express';
 import { editFileName, imageFileFilter } from '../helpers';
 import { diskStorage } from 'multer';
+import { ConfigService } from '@nestjs/config';
+import * as AWS from 'aws-sdk';
+import * as multerS3 from 'multer-s3';
+import { S3Options } from '../config';
 
-@Controller('files')
-export class FileController {
+const s3 = new AWS.S3(S3Options);
+
+console.log(process.env.ACCESS_KEY_ID);
+
+@Controller('uploads-s3')
+export class UploadsS3Controller {
+  constructor(private configService: ConfigService) {}
+
   @Post()
   @UseInterceptors(
     FileInterceptor('image', {
-      storage: diskStorage({
-        destination: './uploads',
-        filename: editFileName,
+      storage: multerS3({
+        s3,
+        acl: 'public-read',
+        bucket: 'multer-bucket',
+        metadata: (req, file, cb) => {
+          cb(null, { fieldName: file.fieldname });
+        },
+        key: (req, file, cb) => {
+          cb(null, Date.now().toString() + '-' + file.originalname);
+        },
       }),
       fileFilter: imageFileFilter,
     }),
   )
   async uploadedFile(@UploadedFile() file) {
     return {
-      originName: file.originalname,
-      filename: file.filename,
+      ...file,
     };
   }
 
@@ -35,7 +51,6 @@ export class FileController {
   @UseInterceptors(
     FilesInterceptor('image', 20, {
       storage: diskStorage({
-        destination: './uploads',
         filename: editFileName,
       }),
       fileFilter: imageFileFilter,
